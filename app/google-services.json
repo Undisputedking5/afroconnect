@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "260860770754",
+    "project_id": "africonnect-ab9c9",
+    "storage_bucket": "africonnect-ab9c9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:260860770754:android:368e41ad3e8eff0f26be5b",
+        "android_client_info": {
+          "package_name": "com.example.africonnect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-eiWELEc-XXAdJ_P5vfAXgTdQK-WyxOA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
