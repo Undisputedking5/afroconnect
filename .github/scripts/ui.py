@@ -34,11 +34,26 @@ def dump():
     return None
 
 
+def dismiss_system_dialogs(nodes):
+    """Emulators on CI sometimes show 'X isn't responding' for system apps — press Wait."""
+    if any("isn't responding" in (n.get("text") or "") for n in nodes):
+        for n in nodes:
+            if (n.get("text") or "") == "Wait":
+                m = list(map(int, re.findall(r"\d+", n.get("bounds", ""))))
+                adb("shell", "input", "tap", str((m[0] + m[2]) // 2), str((m[1] + m[3]) // 2))
+                time.sleep(1)
+                return True
+    return False
+
+
 def find(target):
     root = dump()
     if root is None:
         return None
     nodes = list(root.iter("node"))
+    if dismiss_system_dialogs(nodes):
+        root = dump()
+        nodes = list(root.iter("node")) if root is not None else []
     t = target.lower()
     for exact in (True, False):
         for n in nodes:
