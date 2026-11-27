@@ -37,12 +37,12 @@ import com.example.africonnect.util.distanceKm
 import com.example.africonnect.util.formatKm
 import com.example.africonnect.viewmodel.AppViewModel
 import kotlinx.coroutines.launch
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.TilesOverlay
 
 private sealed interface MapItem {
     val key: String; val lat: Double; val lng: Double; val title: String
@@ -55,6 +55,16 @@ private sealed interface MapItem {
 }
 
 private val NAIROBI = GeoPoint(-1.2921, 36.8219)
+
+// CARTO basemaps (OpenStreetMap data). Free for apps with attribution; OSM's own tile
+// servers block third-party apps.
+private fun carto(style: String): OnlineTileSourceBase = XYTileSource(
+    "carto-$style", 1, 19, 256, ".png",
+    arrayOf("a", "b", "c", "d").map { "https://$it.basemaps.cartocdn.com/rastertiles/$style/" }.toTypedArray(),
+    "© OpenStreetMap contributors © CARTO"
+)
+private val CartoLight = carto("voyager")
+private val CartoDark = carto("dark_all")
 
 @Composable
 fun MapScreen(app: AppViewModel, nav: Nav, showBack: Boolean) {
@@ -88,9 +98,9 @@ fun MapScreen(app: AppViewModel, nav: Nav, showBack: Boolean) {
 
     val mapView = remember {
         MapView(context).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            setTileSource(CartoLight)
             controller.setZoom(12.0)
             controller.setCenter(center ?: NAIROBI)
             minZoomLevel = 3.0
@@ -132,7 +142,8 @@ fun MapScreen(app: AppViewModel, nav: Nav, showBack: Boolean) {
                 factory = { mapView },
                 modifier = Modifier.fillMaxSize(),
                 update = { mv ->
-                    mv.overlayManager.tilesOverlay.setColorFilter(if (dark) TilesOverlay.INVERT_COLORS else null)
+                    val source = if (dark) CartoDark else CartoLight
+                    if (mv.tileProvider.tileSource.name() != source.name()) mv.setTileSource(source)
                     mv.overlays.removeAll { it is Marker }
                     ref?.let { c ->
                         mv.overlays.add(Marker(mv).apply {
@@ -181,6 +192,13 @@ fun MapScreen(app: AppViewModel, nav: Nav, showBack: Boolean) {
                     }
                 }
             }
+
+            Text(
+                "© OpenStreetMap contributors © CARTO",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 2.dp)
+            )
 
             // ── Bottom: locate + results ───────────────────────────────────
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {

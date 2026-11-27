@@ -318,7 +318,7 @@ private fun ApplySheet(job: Job, onDismiss: () -> Unit, onSubmit: (String, Strin
             ErrorBanner(error)
             Spacer(Modifier.height(8.dp))
             AppTextField(
-                bid, { bid = it; error = null }, "Your bid",
+                bid, { bid = it.filter { c -> c.isDigit() || c == '.' || c == ',' }; error = null }, "Your bid",
                 placeholder = job.budget.ifBlank { "e.g. 25,000" }, prefix = "${job.currency} ",
                 keyboardType = KeyboardType.Number, leadingIcon = Icons.Outlined.Payments,
                 supporting = if (job.budget.isNotBlank()) "Client's budget: ${job.budget}" else null
@@ -333,7 +333,10 @@ private fun ApplySheet(job: Job, onDismiss: () -> Unit, onSubmit: (String, Strin
             PrimaryButton("Send proposal", {
                 when {
                     cover.trim().length < 30 -> error = "Write at least 30 characters so the client knows why you're a fit."
-                    else -> onSubmit(cover.trim(), if (bid.isBlank()) "" else "${job.currency} ${bid.trim()}")
+                    else -> onSubmit(
+                        cover.trim(),
+                        bid.replace(",", "").toDoubleOrNull()?.let { formatMoney(it, job.currency) } ?: bid.trim()
+                    )
                 }
             }, icon = Icons.AutoMirrored.Outlined.Send)
         }

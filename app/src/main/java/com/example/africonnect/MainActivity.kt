@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
             Repo.database = FirebaseDatabase.getInstance()
         }
         Configuration.getInstance().apply {
-            userAgentValue = packageName
+            userAgentValue = "AfroConnect/${BuildConfig.VERSION_NAME} (Android)"
             osmdroidBasePath = cacheDir
             osmdroidTileCache = cacheDir.resolve("tiles")
         }
