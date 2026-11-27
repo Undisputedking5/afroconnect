@@ -33,7 +33,12 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.USE_FIREBASE_EMULATOR && !emulatorConfigured) {
             emulatorConfigured = true
             com.google.firebase.auth.FirebaseAuth.getInstance().useEmulator("10.0.2.2", 9099)
-            Repo.database = FirebaseDatabase.getInstance("http://10.0.2.2:9000?ns=africonnect-ab9c9-default-rtdb")
+            // Keep this exact instance: after useEmulator(), getInstance() can return a fresh,
+            // non-emulator instance, so everything goes through Repo.database.
+            Repo.database = FirebaseDatabase.getInstance().apply {
+                setLogLevel(com.google.firebase.database.Logger.Level.DEBUG)
+                useEmulator("10.0.2.2", 9000)
+            }
             com.google.firebase.storage.FirebaseStorage.getInstance().useEmulator("10.0.2.2", 9199)
         } else if (!BuildConfig.USE_FIREBASE_EMULATOR) {
             runCatching { FirebaseDatabase.getInstance().setPersistenceEnabled(true) }
