@@ -68,6 +68,13 @@ android {
     }
 }
 
+// The Database emulator can't validate App Check tokens, so CI emulator builds drop App Check.
+if ((project.findProperty("useFirebaseEmulator") as String?) == "true") {
+    configurations.configureEach {
+        exclude(group = "com.google.firebase", module = "firebase-appcheck")
+    }
+}
+
 dependencies {
     // AndroidX & UI
     implementation(libs.androidx.core.ktx)
@@ -91,7 +98,6 @@ dependencies {
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
-    implementation("com.google.firebase:firebase-appcheck")
     // REMOVED: firebase-inappmessaging-ktx — you don't use it
 
     // Location + OpenStreetMap (no API key required)

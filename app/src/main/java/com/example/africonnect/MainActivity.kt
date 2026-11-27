@@ -32,8 +32,6 @@ class MainActivity : ComponentActivity() {
         Prefs.init(this)
         if (BuildConfig.USE_FIREBASE_EMULATOR && !emulatorConfigured) {
             emulatorConfigured = true
-            com.google.firebase.appcheck.FirebaseAppCheck.getInstance()
-                .installAppCheckProviderFactory(com.example.africonnect.util.EmulatorAppCheckFactory())
             com.google.firebase.auth.FirebaseAuth.getInstance().useEmulator("10.0.2.2", 9099)
             FirebaseDatabase.getInstance().setLogLevel(com.google.firebase.database.Logger.Level.DEBUG)
             FirebaseDatabase.getInstance().useEmulator("10.0.2.2", 9000)
