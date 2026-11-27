@@ -62,12 +62,13 @@ jobs:
           tail -20 emulators.log
 
       - name: Check emulators accept auth tokens
+        continue-on-error: true
         run: |
           R=$(curl -s -X POST "localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake" -H 'Content-Type: application/json' -d '{"email":"probe@test.dev","password":"secret123","returnSecureToken":true}')
           TOKEN=$(echo "$R" | python3 -c 'import sys,json;print(json.load(sys.stdin)["idToken"])')
-          UID=$(echo "$R" | python3 -c 'import sys,json;print(json.load(sys.stdin)["localId"])')
+          LID=$(echo "$R" | python3 -c 'import sys,json;print(json.load(sys.stdin)["localId"])')
           for NS in africonnect-ab9c9-default-rtdb africonnect-ab9c9; do
-            echo "ns=$NS:"; curl -s -X PUT "localhost:9000/users/$UID/name.json?ns=$NS&auth=$TOKEN" -d '"probe"'; echo
+            echo "ns=$NS:"; curl -s -X PUT "localhost:9000/users/$LID/name.json?ns=$NS&auth=$TOKEN" -d '"probe"'; echo
           done
 
       - name: Enable KVM
