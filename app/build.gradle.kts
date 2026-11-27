@@ -91,6 +91,7 @@ dependencies {
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
+    implementation("com.google.firebase:firebase-appcheck")
     // REMOVED: firebase-inappmessaging-ktx — you don't use it
 
     // Location + OpenStreetMap (no API key required)
