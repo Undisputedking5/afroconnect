@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.USE_FIREBASE_EMULATOR && !emulatorConfigured) {
             emulatorConfigured = true
             com.google.firebase.auth.FirebaseAuth.getInstance().useEmulator("10.0.2.2", 9099)
+            FirebaseDatabase.getInstance().setLogLevel(com.google.firebase.database.Logger.Level.DEBUG)
             FirebaseDatabase.getInstance().useEmulator("10.0.2.2", 9000)
             com.google.firebase.storage.FirebaseStorage.getInstance().useEmulator("10.0.2.2", 9199)
         } else if (!BuildConfig.USE_FIREBASE_EMULATOR) {
