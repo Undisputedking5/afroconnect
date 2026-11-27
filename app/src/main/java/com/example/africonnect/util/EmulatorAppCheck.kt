@@ -17,7 +17,7 @@ class EmulatorAppCheckFactory : AppCheckProviderFactory {
     override fun create(app: FirebaseApp): AppCheckProvider = AppCheckProvider {
         val now = System.currentTimeMillis()
         fun b64(s: String) = Base64.encodeToString(s.toByteArray(), Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
-        val jwt = b64("""{"alg":"none","typ":"JWT"}""") + "." +
+        val jwt = b64("""{"alg":"HS256","typ":"JWT"}""") + "." +
             b64("""{"sub":"${app.options.applicationId}","aud":["projects/${app.options.projectId}"],"iat":${now / 1000},"exp":${now / 1000 + 3600}}""") + "." + b64("emulator-signature")
         val token = object : AppCheckToken() {
             override fun getToken() = jwt
