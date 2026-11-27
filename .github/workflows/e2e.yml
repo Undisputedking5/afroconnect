@@ -5,7 +5,8 @@ name: End-to-end test (emulator)
 # flows. Screenshots and logcat are uploaded as the "e2e-screenshots" artifact.
 on:
   push:
-    branches: ["**"]
+    branches: [master]
+  pull_request:
   workflow_dispatch:
 
 permissions:

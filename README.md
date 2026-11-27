@@ -75,6 +75,10 @@ notifications/{uid}/{id}        in-app notifications
 
 Jobs, users and chats created by the earlier version of the app are still read correctly.
 
+## Automated end-to-end test
+
+`.github/workflows/e2e.yml` runs on pull requests and on pushes to `master`. It builds the app pointed at local Firebase emulators, which apply this repo's security rules, so it never touches your real project. It then walks through the whole marketplace flow on an Android emulator: register a client, post a job, register a freelancer, apply, review the proposal, hire, chat and switch to dark theme. The run fails if any step breaks or the app crashes. Screenshots of every step are published to the `ci-screenshots` branch.
+
 ## Building locally
 
 Open the project in Android Studio (Ladybug or newer, JDK 21) and run the `app` configuration, or:
