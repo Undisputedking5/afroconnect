@@ -6,10 +6,10 @@ plugins {
 
 android {
     namespace = "com.example.africonnect"
-    compileSdk = 36  // changed from 36 — SDK 36 is not stable yet
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.africonnect"
+        applicationId = "com.example.africonnect" // must match google-services.json
         minSdk = 24
         targetSdk = 35
         versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1) + 1
@@ -78,6 +78,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     // Firebase — BOM manages ALL versions, never add versions manually
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
@@ -86,8 +87,9 @@ dependencies {
     implementation("com.google.firebase:firebase-storage-ktx")
     // REMOVED: firebase-inappmessaging-ktx — you don't use it
 
-    // Google Sign-In
-    implementation("com.google.android.gms:play-services-auth:21.3.0")
+    // Location + OpenStreetMap (no API key required)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")

@@ -1,115 +1,116 @@
 package com.example.africonnect.viewmodel
 
-
+import android.util.Patterns
 import androidx.lifecycle.ViewModel
-import com.google.firebase.auth.FirebaseAuth
+import androidx.lifecycle.viewModelScope
+import com.example.africonnect.data.Repo
+import com.example.africonnect.model.Roles
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
+import com.google.firebase.auth.UserProfileChangeRequest
+import com.google.firebase.database.ServerValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import com.example.africonnect.model.UserRole
-import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.database.FirebaseDatabase
-
-class AuthViewModel : ViewModel() {
-
-    private val auth = FirebaseAuth.getInstance()
-
-    private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
-    private val _userRole = MutableStateFlow("")
-    val userRole: StateFlow<String> = _userRole
-    val authState: StateFlow<AuthState> = _authState
-
-    fun registerWithEmail(email: String, password: String,role: UserRole) {
-        if (email.isBlank() || password.isBlank()) {
-            _authState.value = AuthState.Error("Email and password cannot be empty")
-            return
-        }
-        _authState.value = AuthState.Loading
-        auth.createUserWithEmailAndPassword(email, password)
-            .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: return@addOnSuccessListener
-
-                // Save user to Realtime Database
-                val database = FirebaseDatabase.getInstance().reference
-                val user = mapOf(
-                    "email" to email,
-                    "role" to role.name,
-                    "createdAt" to System.currentTimeMillis()
-                )
-                database.child("users").child(uid).setValue(user)
-                    .addOnSuccessListener {
-                        _authState.value = AuthState.Success
-                    }
-                    .addOnFailureListener {
-                        _authState.value = AuthState.Error(it.message ?: "Failed to save user")
-                    }
-            }
-            .addOnFailureListener {
-                _authState.value = AuthState.Error(it.message ?: "Registration failed")
-            }
-
-    }
-    fun logout() {
-        auth.signOut()
-        _authState.value = AuthState.Idle
-        _userRole.value = ""
-    }
-    fun loginWithEmail(email: String, password: String) {
-        if (email.isBlank() || password.isBlank()) {
-            _authState.value = AuthState.Error("Email and password cannot be empty")
-            return
-        }
-        _authState.value = AuthState.Loading
-        auth.signInWithEmailAndPassword(email, password)
-            .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: return@addOnSuccessListener
-                FirebaseDatabase.getInstance().reference
-                    .child("users").child(uid).child("role")
-                    .get()
-                    .addOnSuccessListener { snapshot ->
-                        val role = snapshot.getValue(String::class.java) ?: "FREELANCER"
-                        _userRole.value = role
-                        _authState.value = AuthState.Success
-                    }
-                    .addOnFailureListener {
-                        _authState.value = AuthState.Error(it.message ?: "Login failed")
-                    }
-
-
-            }
-            .addOnFailureListener {
-                _authState.value = AuthState.Error(it.message ?: "Login failed")
-            }
-
-    }
-    fun signInWithGoogle(idToken: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        val credential = GoogleAuthProvider.getCredential(idToken, null)
-        auth.signInWithCredential(credential)
-            .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: return@addOnSuccessListener
-                val isNewUser = result.additionalUserInfo?.isNewUser ?: false
-                if (isNewUser) {
-                    // Save new Google user to database
-                    val database = FirebaseDatabase.getInstance().reference
-                    val user = mapOf(
-                        "email" to (result.user?.email ?: ""),
-                        "name" to (result.user?.displayName ?: ""),
-                        "role" to _userRole.value.ifEmpty { "FREELANCER" },
-                        "createdAt" to System.currentTimeMillis()
-                    )
-                    database.child("users").child(uid).setValue(user)
-                }
-                _authState.value = AuthState.Success
-                onSuccess()
-            }
-            .addOnFailureListener {
-                onError(it.message ?: "Google sign-in failed")
-            }
-    }
-}
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 sealed class AuthState {
-    object Idle : AuthState()
-    object Loading : AuthState()
-    object Success : AuthState()
+    data object Idle : AuthState()
+    data object Loading : AuthState()
+    data class Success(val role: String) : AuthState()
     data class Error(val message: String) : AuthState()
+    data class Info(val message: String) : AuthState()
+}
+
+class AuthViewModel : ViewModel() {
+    private val _state = MutableStateFlow<AuthState>(AuthState.Idle)
+    val state: StateFlow<AuthState> = _state
+
+    fun clear() { _state.value = AuthState.Idle }
+
+    fun register(name: String, email: String, password: String, confirm: String, role: String) {
+        val e = email.trim()
+        when {
+            name.isBlank() -> return fail("Please enter your full name")
+            !Patterns.EMAIL_ADDRESS.matcher(e).matches() -> return fail("Enter a valid email address")
+            password.length < 6 -> return fail("Password must be at least 6 characters")
+            password != confirm -> return fail("Passwords don't match")
+        }
+        _state.value = AuthState.Loading
+        viewModelScope.launch {
+            try {
+                val user = Repo.auth.createUserWithEmailAndPassword(e, password).await().user
+                    ?: return@launch fail("Registration failed")
+                user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name.trim()).build())
+                Repo.db.child("users").child(user.uid).setValue(
+                    mapOf(
+                        "name" to name.trim(),
+                        "email" to e,
+                        "role" to role,
+                        "createdAt" to ServerValue.TIMESTAMP,
+                        "isAvailable" to true,
+                        "workType" to "Remote",
+                    )
+                ).await()
+                _state.value = AuthState.Success(role)
+            } catch (t: Throwable) {
+                fail(friendly(t))
+            }
+        }
+    }
+
+    fun login(email: String, password: String) {
+        if (email.isBlank() || password.isBlank()) return fail("Enter your email and password")
+        _state.value = AuthState.Loading
+        viewModelScope.launch {
+            try {
+                val user = Repo.auth.signInWithEmailAndPassword(email.trim(), password).await().user
+                    ?: return@launch fail("Login failed")
+                val snap = Repo.db.child("users").child(user.uid).get().await()
+                if (!snap.exists()) {
+                    // Account exists in Auth but its profile was never written — repair it.
+                    Repo.db.child("users").child(user.uid).setValue(
+                        mapOf(
+                            "name" to (user.displayName ?: ""), "email" to (user.email ?: ""),
+                            "role" to Roles.FREELANCER, "createdAt" to ServerValue.TIMESTAMP,
+                        )
+                    ).await()
+                }
+                val role = snap.child("role").getValue(String::class.java) ?: Roles.FREELANCER
+                _state.value = AuthState.Success(role)
+            } catch (t: Throwable) {
+                fail(friendly(t))
+            }
+        }
+    }
+
+    fun resetPassword(email: String) {
+        val e = email.trim()
+        if (!Patterns.EMAIL_ADDRESS.matcher(e).matches()) return fail("Enter your email above first")
+        _state.value = AuthState.Loading
+        viewModelScope.launch {
+            try {
+                Repo.auth.sendPasswordResetEmail(e).await()
+                _state.value = AuthState.Info("Password reset link sent to $e")
+            } catch (t: Throwable) {
+                fail(friendly(t))
+            }
+        }
+    }
+
+    private fun fail(msg: String) { _state.value = AuthState.Error(msg) }
+
+    companion object {
+        fun friendly(t: Throwable): String = when (t) {
+            is FirebaseNetworkException -> "No internet connection. Check your network and try again."
+            is FirebaseAuthWeakPasswordException -> "Password is too weak — use at least 6 characters."
+            is FirebaseAuthUserCollisionException -> "An account with this email already exists. Sign in instead."
+            is FirebaseAuthInvalidUserException -> "No account found with that email."
+            is FirebaseAuthInvalidCredentialsException -> "Incorrect email or password."
+            else -> t.message ?: "Something went wrong. Please try again."
+        }
+    }
 }

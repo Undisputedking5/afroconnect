@@ -1,301 +1,194 @@
 package com.example.africonnect.navigation
 
-import android.content.Context
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.compose.ui.platform.LocalContext
-import com.example.africonnect.screens.*
-import com.example.africonnect.viewmodel.AuthViewModel
-import com.example.africonnect.viewmodel.AuthState
-import com.example.africonnect.viewmodel.ProfileViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import com.example.africonnect.viewmodel.JobViewModel
-import com.google.firebase.auth.FirebaseAuth
+import com.example.africonnect.data.Repo
+import com.example.africonnect.screens.*
+import com.example.africonnect.ui.components.LoadingBox
+import com.example.africonnect.ui.theme.Sunset
+import com.example.africonnect.util.Prefs
+import com.example.africonnect.viewmodel.AppViewModel
 
 object Routes {
-    const val ONBOARDING          = "onboarding"
-    const val REGISTER            = "register"
-    const val LOGIN               = "login"
-    const val LOADING             = "loading"
+    const val ONBOARDING = "onboarding"
+    const val LOGIN = "login"
+    const val REGISTER = "register"
+    const val MAIN = "main"
+    const val JOB = "job/{id}"
+    const val POST_JOB = "post_job?edit={edit}"
+    const val PROPOSALS = "proposals/{id}"
+    const val PROFILE = "profile/{uid}"
+    const val EDIT_PROFILE = "edit_profile"
+    const val CHAT = "chat/{uid}"
+    const val SETTINGS = "settings"
+    const val NOTIFICATIONS = "notifications"
+    const val SAVED = "saved"
+    const val APPLICATIONS = "applications"
+    const val MAP = "map"
 
-    const val CLIENT_HOME         = "client_home"
-    const val FREELANCER_HOME     = "freelancer_home"
+    fun job(id: String) = "job/$id"
+    fun postJob(editId: String = "") = "post_job?edit=$editId"
+    fun proposals(id: String) = "proposals/$id"
+    fun profile(uid: String) = "profile/$uid"
+    fun chat(uid: String) = "chat/$uid"
+}
 
-    const val POST_JOB            = "post_job"
-    const val JOB_DETAIL          = "job_detail/{jobId}"
-    fun jobDetail(jobId: String)  = "job_detail/$jobId"
-
-    const val PROFILE             = "profile"
-    const val CLIENT_PROFILE      = "client_profile/{uid}"
-    fun clientProfile(uid: String) = "client_profile/$uid"
-
-    const val FREELANCER_PROFILE      = "freelancer_profile"
-    const val FREELANCER_PROFILE_VIEW = "freelancer_profile/{uid}"
-    fun freelancerProfile(uid: String) = "freelancer_profile/$uid"
-
-    const val EDIT_PROFILE        = "edit_profile"
-    const val MAP                 = "map"
-    const val MESSAGES            = "messages"
-    const val CHAT                = "chat/{otherUserId}/{userName}"
-    fun chatRoute(otherUserId: String, userName: String) = "chat/$otherUserId/$userName"
-
-    const val SETTINGS            = "settings"
-
+/** Navigation actions handed to screens so they don't depend on NavController directly. */
+class Nav(private val nav: NavHostController) {
+    fun back() { nav.popBackStack() }
+    fun job(id: String) = nav.navigate(Routes.job(id)) { launchSingleTop = true }
+    fun postJob(editId: String = "") = nav.navigate(Routes.postJob(editId))
+    fun proposals(id: String) = nav.navigate(Routes.proposals(id))
+    fun profile(uid: String) = nav.navigate(Routes.profile(uid)) { launchSingleTop = true }
+    fun editProfile() = nav.navigate(Routes.EDIT_PROFILE)
+    fun chat(uid: String) = nav.navigate(Routes.chat(uid)) { launchSingleTop = true }
+    fun settings() = nav.navigate(Routes.SETTINGS)
+    fun notifications() = nav.navigate(Routes.NOTIFICATIONS)
+    fun saved() = nav.navigate(Routes.SAVED)
+    fun applications() = nav.navigate(Routes.APPLICATIONS)
+    fun map() = nav.navigate(Routes.MAP)
+    fun register() = nav.navigate(Routes.REGISTER)
+    fun login() = nav.navigate(Routes.LOGIN) { popUpTo(Routes.REGISTER) { inclusive = true } }
+    fun toMain() = nav.navigate(Routes.MAIN) { popUpTo(0) { inclusive = true } }
+    fun toLogin() = nav.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
 }
 
 @Composable
-fun NavGraph(navController: NavHostController) {
+fun NavGraph(navController: NavHostController, app: AppViewModel) {
     val context = LocalContext.current
-
-    val onboardingComplete = remember {
-        context.getSharedPreferences("africonnect_prefs", Context.MODE_PRIVATE)
-            .getBoolean("onboarding_complete", false)
-    }
-
-    val isLoggedIn = FirebaseAuth.getInstance().currentUser != null
-
-    val startDestination = remember {
+    val nav = remember(navController) { Nav(navController) }
+    val start = remember {
         when {
-            !onboardingComplete -> Routes.ONBOARDING
-            isLoggedIn          -> Routes.LOADING
-            else                -> Routes.REGISTER
+            !Prefs.onboardingDone(context) -> Routes.ONBOARDING
+            Repo.auth.currentUser != null -> Routes.MAIN
+            else -> Routes.LOGIN
         }
     }
 
-    NavHost(navController = navController, startDestination = startDestination) {
-
-        // ── Loading ───────────────────────────────────────────────────────────
-        composable(Routes.LOADING) {
-            LoadingScreen(
-                onClientReady = {
-                    navController.navigate(Routes.CLIENT_HOME) {
-                        popUpTo(Routes.LOADING) { inclusive = true }
-                    }
-                },
-                onFreelancerReady = {
-                    navController.navigate(Routes.FREELANCER_HOME) {
-                        popUpTo(Routes.LOADING) { inclusive = true }
-                    }
-                }
-            )
+    // If the session ends anywhere (logout, account deleted), return to login.
+    val uid by app.uid.collectAsState()
+    LaunchedEffect(uid) {
+        val route = navController.currentDestination?.route
+        if (uid.isBlank() && route != null && route !in setOf(Routes.ONBOARDING, Routes.LOGIN, Routes.REGISTER)) {
+            nav.toLogin()
         }
+    }
 
-        // ── Onboarding ────────────────────────────────────────────────────────
+    NavHost(
+        navController = navController,
+        startDestination = start,
+        enterTransition = { slideInHorizontally(tween(260)) { it / 6 } + fadeIn(tween(260)) },
+        exitTransition = { fadeOut(tween(180)) },
+        popEnterTransition = { fadeIn(tween(220)) },
+        popExitTransition = { slideOutHorizontally(tween(240)) { it / 6 } + fadeOut(tween(200)) },
+    ) {
         composable(Routes.ONBOARDING) {
-            OnboardingScreen(
-                onFinished = {
-                    navController.navigate(Routes.REGISTER) {
-                        popUpTo(Routes.ONBOARDING) { inclusive = true }
-                    }
-                }
-            )
+            OnboardingScreen(onFinished = {
+                Prefs.setOnboardingDone(context)
+                navController.navigate(Routes.LOGIN) { popUpTo(Routes.ONBOARDING) { inclusive = true } }
+            })
         }
-
-        // ── Register ──────────────────────────────────────────────────────────
-        composable(Routes.REGISTER) {
-            RegisterScreen(
-                onSignInClick = { navController.navigate(Routes.LOGIN) },
-                onSuccess     = {
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.REGISTER) { inclusive = true }
-                    }
-                }
-            )
+        composable(Routes.LOGIN) { LoginScreen(onRegister = nav::register, onSuccess = nav::toMain) }
+        composable(Routes.REGISTER) { RegisterScreen(onLogin = nav::login, onSuccess = nav::toMain) }
+        composable(Routes.MAIN) { MainShell(app, nav) }
+        composable(Routes.JOB, listOf(navArgument("id") { type = NavType.StringType })) {
+            JobDetailScreen(it.arguments?.getString("id").orEmpty(), app, nav)
         }
+        composable(
+            Routes.POST_JOB,
+            listOf(navArgument("edit") { type = NavType.StringType; defaultValue = "" })
+        ) { PostJobScreen(it.arguments?.getString("edit").orEmpty(), app, nav) }
+        composable(Routes.PROPOSALS, listOf(navArgument("id") { type = NavType.StringType })) {
+            ProposalsScreen(it.arguments?.getString("id").orEmpty(), app, nav)
+        }
+        composable(Routes.PROFILE, listOf(navArgument("uid") { type = NavType.StringType })) {
+            ProfileScreen(it.arguments?.getString("uid").orEmpty(), app, nav)
+        }
+        composable(Routes.EDIT_PROFILE) { EditProfileScreen(app, nav) }
+        composable(Routes.CHAT, listOf(navArgument("uid") { type = NavType.StringType })) {
+            ChatScreen(it.arguments?.getString("uid").orEmpty(), app, nav)
+        }
+        composable(Routes.SETTINGS) { SettingsScreen(app, nav) }
+        composable(Routes.NOTIFICATIONS) { NotificationsScreen(app, nav) }
+        composable(Routes.SAVED) { SavedJobsScreen(app, nav) }
+        composable(Routes.APPLICATIONS) { ApplicationsScreen(app, nav) }
+        composable(Routes.MAP) { MapScreen(app, nav, showBack = true) }
+    }
+}
 
-        // ── Login ─────────────────────────────────────────────────────────────
-        composable(Routes.LOGIN) {
-            val authViewModel: AuthViewModel = viewModel()
-            val userRole  by authViewModel.userRole.collectAsState()
-            val authState by authViewModel.authState.collectAsState()
+private data class Tab(val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
 
-            LaunchedEffect(authState, userRole) {
-                if (authState is AuthState.Success && userRole.isNotEmpty()) {
-                    when (userRole) {
-                        "CLIENT"     -> navController.navigate(Routes.CLIENT_HOME) {
-                            popUpTo(Routes.LOGIN) { inclusive = true }
-                        }
-                        "FREELANCER" -> navController.navigate(Routes.FREELANCER_HOME) {
-                            popUpTo(Routes.LOGIN) { inclusive = true }
-                        }
-                    }
+@Composable
+private fun MainShell(app: AppViewModel, nav: Nav) {
+    val me by app.me.collectAsState()
+    val unread by app.unreadMessages.collectAsState()
+    val user = me
+    if (user == null) {
+        Box(Modifier.fillMaxSize()) { LoadingBox(Modifier.fillMaxSize()) }
+        return
+    }
+    val tabs = if (user.isClient) listOf(
+        Tab("Home", Icons.Outlined.Dashboard, Icons.Filled.Dashboard),
+        Tab("Talent", Icons.Outlined.Groups, Icons.Filled.Groups),
+        Tab("Messages", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
+        Tab("Profile", Icons.Outlined.Person, Icons.Filled.Person),
+    ) else listOf(
+        Tab("Discover", Icons.Outlined.Explore, Icons.Filled.Explore),
+        Tab("Nearby", Icons.Outlined.Map, Icons.Filled.Map),
+        Tab("Messages", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
+        Tab("Profile", Icons.Outlined.Person, Icons.Filled.Person),
+    )
+    var selected by rememberSaveable(user.role) { mutableIntStateOf(0) }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        bottomBar = {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
+                tabs.forEachIndexed { i, tab ->
+                    NavigationBarItem(
+                        selected = selected == i,
+                        onClick = { selected = i },
+                        icon = {
+                            BadgedBox(badge = {
+                                if (tab.label == "Messages" && unread > 0) Badge(containerColor = Sunset) { Text("$unread") }
+                            }) { Icon(if (selected == i) tab.selectedIcon else tab.icon, tab.label) }
+                        },
+                        label = { Text(tab.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                        )
+                    )
                 }
             }
-
-            LoginScreen(
-                onRegisterClick = { navController.navigate(Routes.REGISTER) },
-                onSuccess       = {},
-                viewModel       = authViewModel
-            )
         }
-
-        // ── Client Home ───────────────────────────────────────────────────────
-        composable(Routes.CLIENT_HOME) {
-            ClientHomeScreen(
-                onPostJob       = { navController.navigate(Routes.POST_JOB) },
-                onProfile       = { navController.navigate(Routes.PROFILE) },
-                onViewApplicant = { uid -> navController.navigate(Routes.freelancerProfile(uid)) }
-            )
-        }
-
-        // ── Freelancer Home ───────────────────────────────────────────────────
-        composable(Routes.FREELANCER_HOME) {
-            FreelancerHomeScreen(
-                navController = navController,
-                onProfile     = { navController.navigate(Routes.FREELANCER_PROFILE) },
-                onMap         = { navController.navigate(Routes.MAP) },
-                onJobClick    = { jobId -> navController.navigate(Routes.jobDetail(jobId)) },
-                isViewedByClient = false
-            )
-        }
-
-        // ── Post Job ──────────────────────────────────────────────────────────
-        composable(Routes.POST_JOB) {
-            PostJobScreen(
-                onJobPosted = {
-                    navController.navigate(Routes.CLIENT_HOME) {
-                        popUpTo(Routes.POST_JOB) { inclusive = true }
-                    }
-                },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        // ── Job Detail ────────────────────────────────────────────────────────
-        composable(
-            route     = Routes.JOB_DETAIL,
-            arguments = listOf(navArgument("jobId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val jobId: String       = backStackEntry.arguments?.getString("jobId") ?: ""
-            val jobViewModel: JobViewModel = viewModel()
-            JobDetailScreen(
-                navController = navController,
-                jobViewModel  = jobViewModel,
-                jobId         = jobId
-            )
-        }
-
-        // ── Client Profile — own ──────────────────────────────────────────────
-        composable(Routes.PROFILE) {
-            val authViewModel: AuthViewModel = viewModel()
-            val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-            ClientProfileScreen(
-                navController = navController,
-                uid           = uid,
-                isOwnProfile  = true,
-                onEdit        = { navController.navigate(Routes.EDIT_PROFILE) },
-                onLogout      = {
-                    authViewModel.logout()
-                    navController.navigate(Routes.REGISTER) {
-                        popUpTo(0) { inclusive = true }
-                    }
+    ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            Crossfade(targetState = selected, animationSpec = tween(200), label = "tab") { tab ->
+                when (tab) {
+                    0 -> if (user.isClient) ClientHomeScreen(user, app, nav) else DiscoverScreen(user, app, nav)
+                    1 -> if (user.isClient) TalentScreen(app, nav) else MapScreen(app, nav, showBack = false)
+                    2 -> MessagesScreen(app, nav)
+                    else -> ProfileScreen(user.uid, app, nav, isTab = true)
                 }
-            )
-        }
-
-        // ── Client Profile — viewed by others ─────────────────────────────────
-        composable(
-            route     = Routes.CLIENT_PROFILE,
-            arguments = listOf(navArgument("uid") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val uid = backStackEntry.arguments?.getString("uid") ?: ""
-            ClientProfileScreen(
-                navController = navController,
-                uid           = uid,
-                isOwnProfile  = false
-            )
-        }
-
-        // ── Freelancer Profile — own ──────────────────────────────────────────
-        composable(Routes.FREELANCER_PROFILE) {
-            val profileViewModel: ProfileViewModel = viewModel()
-            val authViewModel: AuthViewModel       = viewModel()
-            FreelancerProfileScreen(
-                navController    = navController,
-                profileViewModel = profileViewModel,
-                isOwnProfile     = true,
-                onEdit           = { navController.navigate(Routes.EDIT_PROFILE) },
-                onLogout         = {
-                    authViewModel.logout()
-                    navController.navigate(Routes.REGISTER) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                }
-            )
-        }
-
-        // ── Freelancer Profile — viewed by client ─────────────────────────────
-        composable(
-            route     = Routes.FREELANCER_PROFILE_VIEW,
-            arguments = listOf(navArgument("uid") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val uid = backStackEntry.arguments?.getString("uid") ?: ""
-            val profileViewModel: ProfileViewModel = viewModel()
-            LaunchedEffect(uid) { profileViewModel.loadProfile(uid) }
-            FreelancerProfileScreen(
-                navController    = navController,
-                profileViewModel = profileViewModel,
-                isOwnProfile     = false
-            )
-        }
-
-        // ── Edit Profile ──────────────────────────────────────────────────────
-        composable(Routes.EDIT_PROFILE) {
-            EditProfileScreen(
-                onBack  = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
-            )
-        }
-
-        // ── Map ───────────────────────────────────────────────────────────────
-        composable(Routes.MAP) {
-            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-            MapScreen(
-                navController = navController,
-                currentUserId = currentUserId
-            )
-        }
-
-        // ── Messages ──────────────────────────────────────────────────────────
-        composable(Routes.MESSAGES) {
-            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-            MessagesScreen(
-                navController = navController,
-                currentUserId = currentUserId
-            )
-        }
-
-        // ── Chat ──────────────────────────────────────────────────────────────
-        composable(
-            route     = Routes.CHAT,
-            arguments = listOf(
-                navArgument("otherUserId") { type = NavType.StringType },
-                navArgument("userName")    { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val otherUserId = backStackEntry.arguments?.getString("otherUserId") ?: ""
-            val userName    = backStackEntry.arguments?.getString("userName")    ?: ""
-            ChatScreen(
-                navController = navController,
-                otherUserId   = otherUserId,
-                otherUserName = userName
-            )
-        }
-
-        // ── Settings ──────────────────────────────────────────────────────────
-        composable(Routes.SETTINGS) {
-            SettingsScreen(
-                navController = navController,
-                onLogout      = {
-                    navController.navigate(Routes.ONBOARDING) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                }
-            )
+            }
         }
     }
 }

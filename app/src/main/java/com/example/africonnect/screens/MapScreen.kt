@@ -1,748 +1,270 @@
 package com.example.africonnect.screens
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.*
+import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.*
-import androidx.compose.ui.draw.*
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.*
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import com.example.africonnect.model.UserProfile
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.africonnect.model.Job
-import com.example.africonnect.navigation.Routes
-import androidx.navigation.NavController
-import java.io.File
-import kotlin.math.*
-import androidx.compose.ui.graphics.Color
-import com.example.africonnect.ui.theme.*
-import androidx.compose.foundation.layout.BoxWithConstraints
+import com.example.africonnect.model.UserProfile
+import com.example.africonnect.navigation.Nav
+import com.example.africonnect.ui.components.*
+import com.example.africonnect.ui.theme.Sunset
+import com.example.africonnect.ui.theme.Teal
+import com.example.africonnect.util.currentLocation
+import com.example.africonnect.util.distanceKm
+import com.example.africonnect.util.formatKm
+import com.example.africonnect.viewmodel.AppViewModel
+import kotlinx.coroutines.launch
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.TilesOverlay
 
-// ─── Brand Colors ────────────────────────────────────────────────────────────
-private val TealLight   = Color(0xFFE6F4F2)
-private val BackgroundColor = Color(0xFFF5F7FA)
-private val CardColor   = Color.White
-private val TextPrimary = Color(0xFF1A1A2E)
-private val TextSecondary = Color(0xFF6B7280)
-
-// ─── Mock data (replace with ViewModel in prod) ───────────────────────────────
-private data class MapFreelancer(
-    val uid: String,
-    val name: String,
-    val title: String,
-    val rating: Double,
-    val reviews: Int,
-    val hourlyRate: String,
-    val distanceKm: Double,
-    val isVerified: Boolean,
-    val avatarUrl: String,
-    // Normalized map position [0..1]
-    val mapX: Float,
-    val mapY: Float,
-    val skills: List<String>
-)
-
-private data class MapJob(
-    val id: String,
-    val budget: String,
-    val mapX: Float,
-    val mapY: Float
-)
-
-private val sampleFreelancers = listOf(
-    MapFreelancer("1", "Amara Osei",    "UI/UX Designer",        4.9, 124, "\$28", 1.2, true,  "", 0.35f, 0.58f, listOf("UI Design", "Figma")),
-    MapFreelancer("2", "Kofi Mensah",   "Senior Mobile Dev",     5.0, 98,  "\$35", 2.1, true,  "", 0.65f, 0.42f, listOf("Android", "Kotlin")),
-    MapFreelancer("3", "Zara Diallo",   "Backend Developer",     4.7, 56,  "\$30", 3.4, false, "", 0.25f, 0.35f, listOf("Node.js", "Firebase")),
-    MapFreelancer("4", "Seun Adeyemi",  "Graphic Designer",      4.8, 83,  "\$22", 4.8, true,  "", 0.72f, 0.65f, listOf("Branding", "Illustrator")),
-)
-
-private val sampleJobs = listOf(
-    MapJob("j1", "\$450", 0.55f, 0.68f),
-    MapJob("j2", "\$200", 0.40f, 0.30f),
-)
-
-private val skillFilters = listOf("UI Design", "Backend Dev", "Marketing", "Python", "Android")
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MapScreen(
-    navController: NavController,
-    currentUserId: String = ""
-) {
-    var searchQuery      by remember { mutableStateOf("") }
-    var selectedTab      by remember { mutableStateOf(0) }   // 0 = Nearby, 1 = Remote
-    var selectedSkills   by remember { mutableStateOf(setOf<String>()) }
-    var radiusKm         by remember { mutableStateOf(15f) }
-    var selectedFreelancer by remember { mutableStateOf<MapFreelancer?>(sampleFreelancers.firstOrNull()) }
-
-    var showFilterSheet  by remember { mutableStateOf(false) }
-
-    val filteredFreelancers = remember(searchQuery, selectedSkills, selectedTab) {
-        sampleFreelancers.filter { f ->
-            val matchesSearch = searchQuery.isBlank() ||
-                    f.name.contains(searchQuery, ignoreCase = true) ||
-                    f.title.contains(searchQuery, ignoreCase = true)
-            val matchesSkills = selectedSkills.isEmpty() ||
-                    f.skills.any { it in selectedSkills }
-            val matchesType = selectedTab == 1 // Remote shows all; Nearby filters by radius
-            matchesSearch && matchesSkills
-        }
+private sealed interface MapItem {
+    val key: String; val lat: Double; val lng: Double; val title: String
+    data class J(val job: Job) : MapItem {
+        override val key = "j" + job.id; override val lat = job.latitude; override val lng = job.longitude; override val title = job.title
     }
-
-    Box(modifier = Modifier.fillMaxSize().background(BackgroundColor)) {
-
-        // ── Map Background ──────────────────────────────────────────────────
-        MapBackground(modifier = Modifier.fillMaxSize())
-
-        // ── Radius Circle (subtle overlay) ──────────────────────────────────
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val cx = size.width * 0.5f
-            val cy = size.height * 0.55f
-            val px = (radiusKm / 50f) * size.width * 0.45f
-            drawCircle(color = TealColor.copy(alpha = 0.08f), radius = px, center = Offset(cx, cy))
-            drawCircle(color = TealColor.copy(alpha = 0.20f), radius = px, center = Offset(cx, cy), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
-        }
-
-        // ── Map Pins ────────────────────────────────────────────────────────
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val w = this.maxWidth.value
-            val h = this.maxHeight.value
-
-            // Job pins
-            sampleJobs.forEach { job ->
-                val x = (job.mapX * w).dp - 28.dp
-                val y = (job.mapY * h * 0.72f + h * 0.12f).dp - 28.dp
-                JobPin(job = job, modifier = Modifier.offset(x = x, y = y))
-            }
-
-            // Freelancer pins
-            filteredFreelancers.forEach { freelancer ->
-                val x = (freelancer.mapX * w).dp - 36.dp
-                val y = (freelancer.mapY * h * 0.72f + h * 0.12f).dp - 50.dp
-                FreelancerPin(
-                    freelancer = freelancer,
-                    isSelected = selectedFreelancer?.uid == freelancer.uid,
-                    onClick = { selectedFreelancer = freelancer },
-                    modifier = Modifier.offset(x = x, y = y)
-                )
-            }
-        }
-
-        // ── Top Filter Card ─────────────────────────────────────────────────
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .padding(horizontal = 12.dp)
-        ) {
-            FilterCard(
-                searchQuery = searchQuery,
-                onSearchChange = { searchQuery = it },
-                selectedTab = selectedTab,
-                onTabChange = { selectedTab = it },
-                selectedSkills = selectedSkills,
-                onSkillToggle = { skill ->
-                    selectedSkills = if (skill in selectedSkills)
-                        selectedSkills - skill else selectedSkills + skill
-                },
-                radiusKm = radiusKm,
-                onRadiusChange = { radiusKm = it }
-            )
-        }
-
-        // ── Bottom: Selected Freelancer Card ────────────────────────────────
-        AnimatedVisibility(
-            visible = selectedFreelancer != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
-            selectedFreelancer?.let { f ->
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    FreelancerCard(
-                        freelancer = f,
-                        onViewProfile = {
-                            navController.navigate("${Routes.FREELANCER_PROFILE}/${f.uid}")
-                        },
-                        onDismiss = { selectedFreelancer = null }
-                    )
-                    // Bottom Nav
-                    FreelancerBottomNavBar(
-                        navController = navController,
-                        selectedRoute = Routes.MAP
-                    )
-                }
-            }
-        }
-
-        // ── No selection — still show nav ───────────────────────────────────
-        if (selectedFreelancer == null) {
-            Box(modifier = Modifier.align(Alignment.BottomCenter)) {
-                FreelancerBottomNavBar(
-                    navController = navController,
-                    selectedRoute = Routes.MAP
-                )
-            }
-        }
-
-        // ── Re-center FAB ───────────────────────────────────────────────────
-        val bottomOffset = if (selectedFreelancer != null) 180.dp else 90.dp
-        FloatingActionButton(
-            onClick = { /* Re-center map */ },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = bottomOffset),
-            containerColor = CardColor,
-            contentColor = TealColor,
-            elevation = FloatingActionButtonDefaults.elevation(6.dp),
-            shape = CircleShape
-        ) {
-            Icon(Icons.Filled.MyLocation, contentDescription = "My Location")
-        }
+    data class T(val p: UserProfile) : MapItem {
+        override val key = "t" + p.uid; override val lat = p.latitude; override val lng = p.longitude; override val title = p.displayName
     }
 }
 
-// ─── Filter Card ──────────────────────────────────────────────────────────────
+private val NAIROBI = GeoPoint(-1.2921, 36.8219)
+
 @Composable
-private fun FilterCard(
-    searchQuery: String,
-    onSearchChange: (String) -> Unit,
-    selectedTab: Int,
-    onTabChange: (Int) -> Unit,
-    selectedSkills: Set<String>,
-    onSkillToggle: (String) -> Unit,
-    radiusKm: Float,
-    onRadiusChange: (Float) -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = CardColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+fun MapScreen(app: AppViewModel, nav: Nav, showBack: Boolean) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val me by app.me.collectAsState()
+    val jobs by app.jobs.collectAsState()
+    val freelancers by app.freelancers.collectAsState()
+    val dark = MaterialTheme.colorScheme.background.toArgb().let { android.graphics.Color.luminance(it) < 0.3f }
 
-            // Search + Nearby/Remote tabs
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Search field
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchChange,
-                    placeholder = { Text("Search skills...", color = TextSecondary, fontSize = 14.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(50),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TealColor,
-                        unfocusedBorderColor = Color(0xFFE5E7EB),
-                        focusedContainerColor = Color(0xFFF8F9FA),
-                        unfocusedContainerColor = Color(0xFFF8F9FA)
-                    ),
-                    modifier = Modifier.weight(1f).height(50.dp)
-                )
+    var mode by remember(me?.role) { mutableStateOf(if (me?.isClient == true) "Talent" else "Jobs") }
+    var radius by remember { mutableIntStateOf(0) } // 0 = any
+    var center by remember(me?.uid) {
+        mutableStateOf(me?.takeIf { it.hasLocation }?.let { GeoPoint(it.latitude, it.longitude) })
+    }
+    var selected by remember { mutableStateOf<String?>(null) }
+    var locating by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); message = null } }
 
-                Spacer(modifier = Modifier.width(10.dp))
+    val items: List<MapItem> = remember(mode, jobs, freelancers, me?.uid) {
+        if (mode == "Jobs") jobs.filter { it.isOpen && it.hasLocation && it.postedBy != me?.uid }.map { MapItem.J(it) }
+        else freelancers.filter { it.showOnMap && it.hasLocation }.map { MapItem.T(it) }
+    }
+    val ref = center
+    fun dist(i: MapItem) = ref?.let { distanceKm(it.latitude, it.longitude, i.lat, i.lng) }
+    val visible = remember(items, radius, ref) {
+        items.filter { radius == 0 || (dist(it) ?: 0.0) <= radius }.sortedBy { dist(it) ?: 0.0 }
+    }
 
-                // Nearby / Remote pill tabs
-                Row(
-                    modifier = Modifier
-                        .background(Color(0xFFF0F0F0), RoundedCornerShape(50))
-                        .padding(4.dp)
+    val mapView = remember {
+        MapView(context).apply {
+            setTileSource(TileSourceFactory.MAPNIK)
+            setMultiTouchControls(true)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            controller.setZoom(12.0)
+            controller.setCenter(center ?: NAIROBI)
+            minZoomLevel = 3.0
+        }
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) mapView.onResume()
+            if (e == Lifecycle.Event.ON_PAUSE) mapView.onPause()
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs); mapView.onDetach() }
+    }
+
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted.values.any { it }) {
+            locating = true
+            scope.launch {
+                val p = currentLocation(context)
+                if (p != null) {
+                    center = GeoPoint(p.lat, p.lng)
+                    mapView.controller.animateTo(center, 13.0, 600L)
+                } else message = "Couldn't get your location. Turn on location services."
+                locating = false
+            }
+        } else message = "Location permission is needed to show what's near you"
+    }
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(selected) {
+        val idx = visible.indexOfFirst { it.key == selected }
+        if (idx >= 0) listState.animateScrollToItem(idx)
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }, contentWindowInsets = WindowInsets(0)) { pad ->
+        Box(Modifier.padding(pad).fillMaxSize()) {
+            AndroidView(
+                factory = { mapView },
+                modifier = Modifier.fillMaxSize(),
+                update = { mv ->
+                    mv.overlayManager.tilesOverlay.setColorFilter(if (dark) TilesOverlay.INVERT_COLORS else null)
+                    mv.overlays.removeAll { it is Marker }
+                    ref?.let { c ->
+                        mv.overlays.add(Marker(mv).apply {
+                            position = c; title = "You"; icon = dot(mv, android.graphics.Color.parseColor("#2563EB"), 34)
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        })
+                    }
+                    visible.forEach { item ->
+                        mv.overlays.add(Marker(mv).apply {
+                            position = GeoPoint(item.lat, item.lng)
+                            title = item.title
+                            val color = if (item is MapItem.J) Sunset.toArgb() else Teal.toArgb()
+                            icon = dot(mv, color, if (item.key == selected) 64 else 46)
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            setOnMarkerClickListener { _, _ -> selected = item.key; true }
+                        })
+                    }
+                    mv.invalidate()
+                }
+            )
+
+            // ── Top controls ───────────────────────────────────────────────
+            Column(Modifier.statusBarsPadding().padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (showBack) {
+                        FilledTonalIconButton(onClick = nav::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Surface(shape = MaterialTheme.shapes.extraLarge, shadowElevation = 4.dp, modifier = Modifier.weight(1f)) {
+                        SegmentedTabs(listOf("Jobs", "Talent"), mode, { mode = it; selected = null })
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(listOf(0, 5, 10, 25, 50)) { km ->
+                        FilterChip(
+                            selected = radius == km,
+                            onClick = {
+                                if (km != 0 && ref == null) permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                radius = km
+                            },
+                            label = { Text(if (km == 0) "Any distance" else "$km km") },
+                            colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = FilterChipDefaults.filterChipElevation(elevation = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            // ── Bottom: locate + results ───────────────────────────────────
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                SmallFloatingActionButton(
+                    onClick = { permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) },
+                    modifier = Modifier.align(Alignment.End).padding(12.dp),
+                    containerColor = MaterialTheme.colorScheme.surface
                 ) {
-                    listOf("Nearby", "Remote").forEachIndexed { i, label ->
-                        val selected = selectedTab == i
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    if (selected) TealColor else Color.Transparent,
-                                    RoundedCornerShape(50)
-                                )
-                                .clickable { onTabChange(i) }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
+                    if (locating) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Outlined.MyLocation, "My location", tint = MaterialTheme.colorScheme.primary)
+                }
+                if (visible.isEmpty()) {
+                    Surface(Modifier.padding(12.dp).fillMaxWidth(), shape = MaterialTheme.shapes.large, shadowElevation = 6.dp) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.TravelExplore, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
                             Text(
-                                text = label,
-                                color = if (selected) Color.White else TextSecondary,
-                                fontSize = 13.sp,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                                if (mode == "Jobs") "No on-site jobs pinned ${if (radius > 0) "within $radius km" else "yet"}. Remote jobs are on the Discover tab."
+                                else "No freelancers on the map ${if (radius > 0) "within $radius km" else "yet"}. Freelancers can opt in from Edit profile.",
+                                style = MaterialTheme.typography.bodyMedium
                             )
+                        }
+                    }
+                } else {
+                    LazyRow(
+                        state = listState,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(visible, key = { it.key }) { item ->
+                            val d = dist(item)?.let(::formatKm)
+                            Surface(shape = MaterialTheme.shapes.large, shadowElevation = 6.dp, modifier = Modifier.width(280.dp)) {
+                                when (item) {
+                                    is MapItem.J -> MapJobCard(item.job, d) { nav.job(item.job.id) }
+                                    is MapItem.T -> MapTalentCard(item.p, d) { nav.profile(item.p.uid) }
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Skill filter chips
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(skillFilters) { skill ->
-                    val isSelected = skill in selectedSkills
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onSkillToggle(skill) },
-                        label = {
-                            Text(
-                                skill,
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                        },
-                        leadingIcon = if (isSelected) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = TealColor,
-                            selectedLabelColor = Color.White,
-                            selectedLeadingIconColor = Color.White,
-                            containerColor = Color(0xFFF0F0F0),
-                            labelColor = TextSecondary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            selectedBorderColor = Color.Transparent,
-                            borderColor = Color.Transparent
-                        )
-                    )
-                }
-            }
-
-            // Only show radius slider in Nearby tab
-            AnimatedVisibility(visible = selectedTab == 0) {
-                Column {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Radius",
-                            fontSize = 13.sp,
-                            color = TextSecondary,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.width(55.dp)
-                        )
-                        Slider(
-                            value = radiusKm,
-                            onValueChange = onRadiusChange,
-                            valueRange = 1f..50f,
-                            modifier = Modifier.weight(1f),
-                            colors = SliderDefaults.colors(
-                                thumbColor = TealColor,
-                                activeTrackColor = TealColor,
-                                inactiveTrackColor = Color(0xFFD1D5DB)
-                            )
-                        )
-                        Text(
-                            "${radiusKm.toInt()} km",
-                            fontSize = 13.sp,
-                            color = TealColor,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.width(40.dp).padding(start = 8.dp)
-                        )
-                    }
-                }
+@Composable
+private fun MapJobCard(job: Job, distance: String?, onClick: () -> Unit) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.padding(14.dp)) {
+            Text(job.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(job.location, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(job.budget.ifBlank { "Negotiable" }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                if (distance != null) MetaItem(Icons.Outlined.NearMe, distance)
             }
         }
     }
 }
 
-// ─── Map Background (Canvas-drawn teal city grid) ─────────────────────────────
 @Composable
-private fun MapBackground(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        // Teal-washed background
-        drawRect(color = Color(0xFF1A7A6E).copy(alpha = 0.85f))
-        drawRect(color = Color(0xFF0D5C52).copy(alpha = 0.3f))
-
-        val roadColor = Color.White.copy(alpha = 0.15f)
-        val majorRoadColor = Color.White.copy(alpha = 0.22f)
-
-        // Draw concentric rings (ring-road city feel)
-        val cx = size.width * 0.5f
-        val cy = size.height * 0.55f
-        for (i in 1..5) {
-            val radius = (i * size.width * 0.09f)
-            drawCircle(
-                color = roadColor,
-                radius = radius,
-                center = Offset(cx, cy),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = if (i % 2 == 0) 3f else 1.5f)
-            )
-        }
-
-        // Spoke roads radiating from center
-        val spokesCount = 12
-        for (i in 0 until spokesCount) {
-            val angle = (i * 360.0 / spokesCount) * (PI / 180.0)
-            val endX = cx + cos(angle).toFloat() * size.width * 0.6f
-            val endY = cy + sin(angle).toFloat() * size.height * 0.6f
-            drawLine(
-                color = if (i % 3 == 0) majorRoadColor else roadColor,
-                start = Offset(cx, cy),
-                end = Offset(endX, endY),
-                strokeWidth = if (i % 3 == 0) 2.5f else 1.2f
-            )
-        }
-
-        // Horizontal grid lines
-        val gridStep = size.height / 12f
-        for (i in 0..12) {
-            drawLine(
-                color = roadColor.copy(alpha = 0.08f),
-                start = Offset(0f, i * gridStep),
-                end = Offset(size.width, i * gridStep),
-                strokeWidth = 1f
-            )
-        }
-        // Vertical grid lines
-        val vGridStep = size.width / 8f
-        for (i in 0..8) {
-            drawLine(
-                color = roadColor.copy(alpha = 0.08f),
-                start = Offset(i * vGridStep, 0f),
-                end = Offset(i * vGridStep, size.height),
-                strokeWidth = 1f
-            )
-        }
-    }
-}
-
-// ─── Freelancer Map Pin ───────────────────────────────────────────────────────
-@Composable
-private fun FreelancerPin(
-    freelancer: MapFreelancer,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.15f else 1f,
-        label = "pinScale"
-    )
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .scale(scale)
-            .clickable { onClick() }
-    ) {
-        // Avatar circle
-        Box(contentAlignment = Alignment.BottomEnd) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .border(
-                        width = 2.dp,
-                        color = if (isSelected) OrangeColor else TealColor,
-                        shape = CircleShape
-                    )
-                    .padding(2.dp)
-                    .clip(CircleShape)
-                    .background(TealLight)
-            ) {
-                if (freelancer.avatarUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = File(freelancer.avatarUrl),
-                        contentDescription = freelancer.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                    )
-                } else {
-                    // Initials fallback
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Text(
-                            text = freelancer.name.firstOrNull()?.toString() ?: "?",
-                            color = TealColor,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            // Verified badge
-            if (freelancer.isVerified) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(14.dp)
-                        .background(Color.White, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Verified,
-                        contentDescription = "Verified",
-                        tint = TealColor,
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-            }
-        }
-
-        // Pin triangle tip
-        Canvas(modifier = Modifier.size(10.dp, 6.dp)) {
-            val path = Path().apply {
-                moveTo(size.width / 2f, size.height)
-                lineTo(0f, 0f)
-                lineTo(size.width, 0f)
-                close()
-            }
-            drawPath(
-                path,
-                color = if (isSelected) OrangeColor else TealColor
-            )
-        }
-
-        // Name + rate bubble (only when selected)
-        if (isSelected) {
-            Spacer(modifier = Modifier.height(2.dp))
-            Box(
-                modifier = Modifier
-                    .background(TealColor, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
-                Text(
-                    text = "${freelancer.name.split(" ").first()} • ${freelancer.hourlyRate}/hr",
-                    color = Color.White,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}
-// ─── Job Map Pin ──────────────────────────────────────────────────────────────
-@Composable
-private fun JobPin(
-    job: MapJob,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-    ) {
-        // Budget bubble
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .background(OrangeColor, RoundedCornerShape(20.dp))
-                .padding(horizontal = 10.dp, vertical = 5.dp)
-        ) {
-            Text(
-                text = job.budget,
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        // Pin triangle tip
-        Canvas(modifier = Modifier.size(10.dp, 6.dp)) {
-            val path = Path().apply {
-                moveTo(size.width / 2f, size.height)
-                lineTo(0f, 0f)
-                lineTo(size.width, 0f)
-                close()
-            }
-            drawPath(path, color = OrangeColor)
-        }
-    }
-}
-// ─── Freelancer Info Card (bottom sheet style) ────────────────────────────────
-@Composable
-private fun FreelancerCard(
-    freelancer: MapFreelancer,
-    onViewProfile: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 16.dp, bottomEnd = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Avatar
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(TealColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (freelancer.avatarUrl.isNotBlank()) {
-                    val context = LocalContext.current
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(File(freelancer.avatarUrl))
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = freelancer.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
-                    )
-                } else {
-                    Text(
-                        text = freelancer.name.split(" ").map { it.first() }.take(2).joinToString(""),
-                        color = TealColor,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
-            // Info
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = freelancer.name,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = TextPrimary
-                    )
-                    if (freelancer.isVerified) {
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Icon(
-                            Icons.Filled.Verified,
-                            contentDescription = "Verified",
-                            tint = TealColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            "Verified",
-                            color = TealColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-                Text(
-                    text = "${freelancer.title} • ${freelancer.distanceKm}km away",
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${freelancer.hourlyRate}/hr",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = TealColor
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Icon(
-                        Icons.Outlined.Star,
-                        contentDescription = null,
-                        tint = OrangeColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(
-                        text = "${freelancer.rating} (${freelancer.reviews} reviews)",
-                        fontSize = 13.sp,
-                        color = OrangeColor,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // View button
-            Button(
-                onClick = onViewProfile,
-                colors = ButtonDefaults.buttonColors(containerColor = TealColor),
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-            ) {
-                Text("View", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+private fun MapTalentCard(p: UserProfile, distance: String?, onClick: () -> Unit) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(p.avatarUrl, p.displayName, 44.dp, online = p.isOnline)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(p.displayName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(p.title.ifBlank { "Freelancer" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Row { RatingRow(p.rating, p.reviews); if (distance != null) { Spacer(Modifier.width(8.dp)); MetaItem(Icons.Outlined.NearMe, distance) } }
             }
         }
     }
 }
 
-// ─── Bottom Nav (reuse your existing one — this is a standalone fallback) ─────
-@Composable
-private fun FreelancerBottomNavBar(
-    navController: NavController,
-    selectedRoute: String
-) {
-    NavigationBar(
-        containerColor = Color.White,
-        tonalElevation = 0.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(70.dp)
-            .shadow(elevation = 12.dp)
-    ) {
-        data class NavItem(val route: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String)
-
-        val items = listOf(
-            NavItem(Routes.FREELANCER_HOME, Icons.Default.Home,     "Home"),
-            NavItem(Routes.FREELANCER_HOME, Icons.Default.Work,     "Jobs"),   // adjust when Jobs route exists
-            NavItem(Routes.MAP,             Icons.Default.Map,      "Map"),
-            NavItem(Routes.FREELANCER_HOME, Icons.Default.Message,  "Messages"),
-            NavItem(Routes.PROFILE,         Icons.Default.Person,   "Profile"),
-        )
-
-        items.forEach { item ->
-            val isSelected = item.route == selectedRoute && item.label == "Map"
-                    || (item.label != "Map" && false)  // only Map truly selected here
-            NavigationBarItem(
-                selected = item.label == "Map",
-                onClick = {
-                    if (item.route != selectedRoute) navController.navigate(item.route)
-                },
-                icon = {
-                    Icon(
-                        item.icon,
-                        contentDescription = item.label,
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                label = { Text(item.label, fontSize = 11.sp) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = TealColor,
-                    selectedTextColor = TealColor,
-                    indicatorColor = TealLight,
-                    unselectedIconColor = Color(0xFF9CA3AF),
-                    unselectedTextColor = Color(0xFF9CA3AF)
-                )
-            )
-        }
-    }
+/** A round map pin with a white ring. */
+private fun dot(mv: MapView, color: Int, sizeDp: Int): BitmapDrawable {
+    val sizePx = (sizeDp * mv.resources.displayMetrics.density / 2).toInt().coerceAtLeast(12)
+    val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    p.color = android.graphics.Color.WHITE
+    c.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, p)
+    p.color = color
+    c.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f - sizePx * 0.14f, p)
+    return BitmapDrawable(mv.resources, bmp)
 }

@@ -1,88 +1,80 @@
 package com.example.africonnect.viewmodel
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.africonnect.data.ChatRepository
+import com.example.africonnect.data.Repo
 import com.example.africonnect.model.ChatMessage
-import com.google.firebase.auth.FirebaseAuth
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 import com.example.africonnect.model.MessageType
+import com.example.africonnect.model.UserProfile
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 class ChatViewModel : ViewModel() {
-
-    private val repository = ChatRepository()
-    private val auth = FirebaseAuth.getInstance()
-
-    val currentUserId: String get() = auth.currentUser?.uid ?: ""
-
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages
 
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
+    private val _loading = MutableStateFlow(true)
+    val loading: StateFlow<Boolean> = _loading
 
-    private var activeChatId: String = ""
-    private var activeOtherUserId: String = ""
-    private var activeOtherUserName: String = ""
+    private val _other = MutableStateFlow<UserProfile?>(null)
+    val other: StateFlow<UserProfile?> = _other
 
-    // ── Call this when entering a chat screen ────────────────────────────────
-    fun loadMessages(otherUserId: String, otherUserName: String) {
-        if (currentUserId.isEmpty()) return
-        activeChatId       = repository.getChatId(currentUserId, otherUserId)
-        activeOtherUserId  = otherUserId
-        activeOtherUserName = otherUserName
+    private val _sending = MutableStateFlow(false)
+    val sending: StateFlow<Boolean> = _sending
 
-        _isLoading.value = true
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
 
+    private var otherUid = ""
+    private var jobs = mutableListOf<Job>()
+    var visible = false
+
+    fun open(uid: String) {
+        if (uid == otherUid) return
+        otherUid = uid
+        jobs.forEach { it.cancel() }
+        jobs.clear()
+        jobs += viewModelScope.launch {
+            Repo.observeUser(uid).catch { }.collect { _other.value = it }
+        }
+        jobs += viewModelScope.launch {
+            Repo.observeMessages(uid)
+                .map { s -> s.children.map { ChatMessage.from(it) } }
+                .catch { _loading.value = false; _error.value = it.message }
+                .collect { list ->
+                    _messages.value = list
+                    _loading.value = false
+                    if (visible) Repo.markChatRead(uid, list)
+                }
+        }
+    }
+
+    fun markRead() { if (otherUid.isNotBlank()) Repo.markChatRead(otherUid, _messages.value) }
+
+    fun send(me: UserProfile?, text: String) {
+        val other = _other.value ?: UserProfile(uid = otherUid)
+        if (me == null || text.isBlank()) return
         viewModelScope.launch {
-            repository.observeMessages(activeChatId).collect { msgs ->
-                _messages.value = msgs
-                _isLoading.value = false
-            }
-        }
-
-        // Mark as read when opening the chat
-        repository.markAsRead(activeChatId, currentUserId, otherUserId)
-    }
-
-    // ── Send a plain text message ────────────────────────────────────────────
-    fun sendMessage(text: String) {
-        if (text.isBlank() || currentUserId.isEmpty() || activeChatId.isEmpty()) return
-
-        val message = ChatMessage(
-            id        = "",
-            senderId  = currentUserId,
-            text      = text.trim(),
-            timestamp = System.currentTimeMillis(),
-            type      = MessageType.TEXT
-        )
-
-        repository.sendMessage(
-            chatId        = activeChatId,
-            message       = message,
-            currentUserId = currentUserId,
-            otherUserId   = activeOtherUserId,
-            otherUserName = activeOtherUserName
-        )
-    }
-
-    // ── Format timestamp for display ─────────────────────────────────────────
-    fun formatTimestamp(timestamp: Long): String {
-        if (timestamp == 0L) return ""
-        val now = System.currentTimeMillis()
-        val diff = now - timestamp
-        return when {
-            diff < 60_000 -> "Just now"
-            diff < 3_600_000 -> {
-                val mins = (diff / 60_000).toInt()
-                "$mins min ago"
-            }
-            else -> {
-                val sdf = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
-                sdf.format(java.util.Date(timestamp))
-            }
+            runCatching { Repo.sendMessage(other, me, text.trim()) }
+                .onFailure { _error.value = it.message ?: "Message not sent" }
         }
     }
+
+    fun sendImage(me: UserProfile?, uri: Uri) {
+        val other = _other.value ?: UserProfile(uid = otherUid)
+        if (me == null) return
+        _sending.value = true
+        viewModelScope.launch {
+            runCatching {
+                val cid = Repo.chatId(me.uid, other.uid)
+                val url = Repo.uploadImage("chat_media/$cid/${System.currentTimeMillis()}.jpg", uri)
+                Repo.sendMessage(other, me, "", MessageType.IMAGE, url)
+            }.onFailure { _error.value = it.message ?: "Photo not sent" }
+            _sending.value = false
+        }
+    }
+
+    fun clearError() { _error.value = null }
 }
