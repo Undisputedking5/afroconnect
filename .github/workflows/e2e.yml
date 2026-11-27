@@ -50,10 +50,12 @@ jobs:
               "auth": { "host": "0.0.0.0", "port": 9099 },
               "database": { "host": "0.0.0.0", "port": 9000 },
               "storage": { "host": "0.0.0.0", "port": 9199 },
-              "ui": { "enabled": false }
+              "ui": { "enabled": false },
+              "singleProjectMode": false
             }
           }
           JSON
+          export GCLOUD_PROJECT=africonnect-ab9c9
           nohup firebase emulators:start --only auth,database,storage --project africonnect-ab9c9 --config firebase.e2e.json > emulators.log 2>&1 &
           for i in $(seq 1 60); do
             curl -s localhost:9099 >/dev/null && curl -s localhost:9000 >/dev/null && break
@@ -102,7 +104,7 @@ jobs:
         run: |
           mkdir -p /tmp/pub && cp -r shots /tmp/pub/ 2>/dev/null || true
           cp emulators.log database-debug.log /tmp/pub/ 2>/dev/null || true
-          curl -s "localhost:9099/emulator/v1/projects/africonnect-ab9c9/accounts" > /tmp/pub/auth-accounts.json || true
+          curl -s -H "Authorization: Bearer owner" "localhost:9099/identitytoolkit.googleapis.com/v1/projects/africonnect-ab9c9/accounts:query" -X POST -H "Content-Type: application/json" -d "{}" > /tmp/pub/auth-accounts.json || true
           cd /tmp/pub
           git init -q -b ci-screenshots
           git config user.name "github-actions"
