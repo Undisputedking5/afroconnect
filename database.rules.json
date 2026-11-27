@@ -1,0 +1,83 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      ".indexOn": ["role", "showOnMap"],
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        "rating": { ".write": "auth != null" },
+        "reviews": { ".write": "auth != null" },
+        "completedJobs": { ".write": "auth != null" }
+      }
+    },
+    "jobs": {
+      ".read": "auth != null",
+      ".indexOn": ["postedBy", "postedAt"],
+      "$jobId": {
+        ".write": "auth != null && ((!data.exists() && newData.child('postedBy').val() === auth.uid) || data.child('postedBy').val() === auth.uid)",
+        "applicants": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        }
+      }
+    },
+    "proposals": {
+      "$jobId": {
+        ".read": "auth != null && root.child('jobs').child($jobId).child('postedBy').val() === auth.uid",
+        ".write": "auth != null && root.child('jobs').child($jobId).child('postedBy').val() === auth.uid",
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+    "userApplications": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$jobId": {
+          ".write": "auth != null && (auth.uid === $uid || root.child('jobs').child($jobId).child('postedBy').val() === auth.uid)"
+        }
+      }
+    },
+    "savedJobs": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "chats": {
+      "$chatId": {
+        ".read": "auth != null && $chatId.contains(auth.uid)",
+        ".write": "auth != null && $chatId.contains(auth.uid)",
+        "messages": { ".indexOn": ["timestamp"] }
+      }
+    },
+    "conversations": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$other": {
+          ".write": "auth != null && (auth.uid === $uid || auth.uid === $other)"
+        }
+      }
+    },
+    "reviews": {
+      "$uid": {
+        ".read": "auth != null",
+        ".indexOn": ["createdAt"],
+        "$reviewId": {
+          ".write": "auth != null && !data.exists() && newData.child('clientId').val() === auth.uid"
+        }
+      }
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        ".indexOn": ["createdAt"],
+        "$id": {
+          ".write": "auth != null && (auth.uid === $uid || (!data.exists() && newData.child('fromUid').val() === auth.uid))"
+        }
+      }
+    }
+  }
+}

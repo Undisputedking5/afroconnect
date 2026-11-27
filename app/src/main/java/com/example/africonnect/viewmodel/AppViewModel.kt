@@ -35,14 +35,27 @@ class AppViewModel : ViewModel() {
         FirebaseAuth.getInstance().removeAuthStateListener(authListener)
     }
 
+    private val retryTick = MutableStateFlow(0)
+    private val session: Flow<String> = combine(_uid, retryTick) { id, _ -> id }
+
     private fun <T> perUser(empty: T, block: (String) -> Flow<T>): StateFlow<T> =
-        _uid.flatMapLatest { id ->
+        session.flatMapLatest { id ->
             if (id.isBlank()) flowOf(empty)
             else block(id).catch { emit(empty) }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, empty)
 
+    /** Loading → Ready / Missing (no profile record) / Error (e.g. database rules deny access). */
+    val meState: StateFlow<ProfileState> = session.flatMapLatest { id ->
+        if (id.isBlank()) flowOf(ProfileState.Loading)
+        else Repo.observeUser(id)
+            .map { u -> if (u == null) ProfileState.Missing else ProfileState.Ready(u) }
+            .onStart { emit(ProfileState.Loading) }
+            .catch { emit(ProfileState.Error(it.message ?: "Couldn't load your profile")) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, ProfileState.Loading)
+
     /** null while loading or signed out. */
-    val me: StateFlow<UserProfile?> = perUser(null) { Repo.observeUser(it) }
+    val me: StateFlow<UserProfile?> = meState.map { (it as? ProfileState.Ready)?.user }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _jobsLoaded = MutableStateFlow(false)
     val jobsLoaded: StateFlow<Boolean> = _jobsLoaded
@@ -97,8 +110,31 @@ class AppViewModel : ViewModel() {
 
     fun toggleSaved(jobId: String) = Repo.toggleSaved(jobId, jobId in savedIds.value)
 
+    /** Creates the profile record for an account that has none (e.g. made before profiles existed). */
+    fun createProfile(role: String) {
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        Repo.db.child("users").child(user.uid).updateChildren(
+            mapOf(
+                "name" to (user.displayName ?: user.email?.substringBefore("@") ?: ""),
+                "email" to (user.email ?: ""), "role" to role,
+                "createdAt" to com.google.firebase.database.ServerValue.TIMESTAMP,
+                "isAvailable" to true, "workType" to "Remote",
+            )
+        )
+    }
+
+    /** Re-subscribes every stream (used by "Try again" after an error). */
+    fun retry() { retryTick.value++ }
+
     fun logout() {
         Repo.goOffline()
         FirebaseAuth.getInstance().signOut()
     }
+}
+
+sealed interface ProfileState {
+    data object Loading : ProfileState
+    data object Missing : ProfileState
+    data class Ready(val user: UserProfile) : ProfileState
+    data class Error(val message: String) : ProfileState
 }

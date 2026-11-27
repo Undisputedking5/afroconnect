@@ -9,6 +9,9 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.Alignment
+import com.example.africonnect.viewmodel.ProfileState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -136,12 +139,13 @@ private data class Tab(val label: String, val icon: ImageVector, val selectedIco
 
 @Composable
 private fun MainShell(app: AppViewModel, nav: Nav) {
-    val me by app.me.collectAsState()
+    val state by app.meState.collectAsState()
     val unread by app.unreadMessages.collectAsState()
-    val user = me
-    if (user == null) {
-        Box(Modifier.fillMaxSize()) { LoadingBox(Modifier.fillMaxSize()) }
-        return
+    val user = when (val st = state) {
+        is ProfileState.Ready -> st.user
+        ProfileState.Loading -> { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingBox() }; return }
+        ProfileState.Missing -> { FinishSetupScreen(onRole = app::createProfile, onLogout = app::logout); return }
+        is ProfileState.Error -> { ProfileErrorScreen(st.message, onRetry = app::retry, onLogout = app::logout); return }
     }
     val tabs = if (user.isClient) listOf(
         Tab("Home", Icons.Outlined.Dashboard, Icons.Filled.Dashboard),
@@ -155,6 +159,7 @@ private fun MainShell(app: AppViewModel, nav: Nav) {
         Tab("Profile", Icons.Outlined.Person, Icons.Filled.Person),
     )
     var selected by rememberSaveable(user.role) { mutableIntStateOf(0) }
+    BackHandler(enabled = selected != 0) { selected = 0 }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),

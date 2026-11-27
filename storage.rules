@@ -1,0 +1,21 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isImage() {
+      return request.resource.size < 8 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+    }
+    match /avatars/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && fileName == request.auth.uid + '.jpg' && isImage();
+    }
+    match /portfolio/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid && isImage();
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+    match /chat_media/{chatId}/{fileName} {
+      allow read: if request.auth != null && chatId.matches('.*' + request.auth.uid + '.*');
+      allow write: if request.auth != null && chatId.matches('.*' + request.auth.uid + '.*') && isImage();
+    }
+  }
+}

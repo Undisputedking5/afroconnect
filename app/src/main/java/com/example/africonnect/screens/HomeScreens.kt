@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -39,6 +40,7 @@ private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_
 @Composable
 private fun HomeHeader(me: UserProfile, app: AppViewModel, nav: Nav, subtitle: String) {
     val unread by app.unreadNotifications.collectAsState()
+    LightStatusBarIcons()
     Column(
         Modifier.fillMaxWidth().background(BrandGradient)
             .statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 20.dp)
@@ -142,7 +144,7 @@ fun DiscoverScreen(me: UserProfile, app: AppViewModel, nav: Nav) {
                 SearchField(query, { query = it }, "Search jobs, skills, categories")
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    QuickAction("My applications", "${applied.size}", Icons.Outlined.Assignment, Modifier.weight(1f), nav::applications)
+                    QuickAction("My applications", "${applied.size}", Icons.AutoMirrored.Outlined.Assignment, Modifier.weight(1f), nav::applications)
                     QuickAction("Saved jobs", "${saved.size}", Icons.Outlined.Bookmarks, Modifier.weight(1f), nav::saved)
                 }
                 Spacer(Modifier.height(12.dp))

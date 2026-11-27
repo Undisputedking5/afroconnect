@@ -129,6 +129,7 @@ fun BrandMark(light: Boolean = false) {
 
 @Composable
 private fun AuthHeader(title: String, subtitle: String) {
+    LightStatusBarIcons()
     Box(
         Modifier.fillMaxWidth().background(BrandGradient, RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
             .statusBarsPadding().padding(horizontal = 24.dp).padding(top = 20.dp, bottom = 36.dp)
@@ -241,5 +242,39 @@ private fun RoleOption(title: String, subtitle: String, icon: ImageVector, selec
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
         }
+    }
+}
+
+/** Shown when a signed-in account has no profile record yet. */
+@Composable
+fun FinishSetupScreen(onRole: (String) -> Unit, onLogout: () -> Unit) {
+    var role by remember { mutableStateOf(Roles.FREELANCER) }
+    var saving by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        AuthHeader("Finish setting up", "Tell us how you'll use AfroConnect.")
+        Column(Modifier.padding(24.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                RoleOption("Find work", "I'm a freelancer", Icons.Outlined.Laptop, role == Roles.FREELANCER, Modifier.weight(1f)) { role = Roles.FREELANCER }
+                RoleOption("Hire talent", "I'm a client", Icons.Outlined.BusinessCenter, role == Roles.CLIENT, Modifier.weight(1f)) { role = Roles.CLIENT }
+            }
+            Spacer(Modifier.height(24.dp))
+            PrimaryButton("Continue", { saving = true; onRole(role) }, loading = saving)
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onLogout, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Use a different account") }
+        }
+    }
+}
+
+/** Shown when the profile can't be read — most often because Firebase rules deny access. */
+@Composable
+fun ProfileErrorScreen(message: String, onRetry: () -> Unit, onLogout: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().systemBarsPadding().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
+    ) {
+        EmptyState(Icons.Outlined.CloudOff, "Couldn't load your account", message)
+        PrimaryButton("Try again", onRetry)
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onLogout) { Text("Log out") }
     }
 }

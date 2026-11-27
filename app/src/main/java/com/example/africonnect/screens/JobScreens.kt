@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -148,7 +149,7 @@ fun JobDetailScreen(jobId: String, app: AppViewModel, nav: Nav) {
                                 ) { Text("Withdraw application") }
                             } else PrimaryButton("Applied", {}, Modifier.weight(1f), enabled = false)
                         }
-                        isFreelancer && job.isOpen -> PrimaryButton("Apply now", { showApply = true }, icon = Icons.Outlined.Send)
+                        isFreelancer && job.isOpen -> PrimaryButton("Apply now", { showApply = true }, icon = Icons.AutoMirrored.Outlined.Send)
                         user != null && !isOwner -> PrimaryButton("Message client", { nav.chat(job.postedBy) }, icon = Icons.AutoMirrored.Outlined.Chat)
                         else -> PrimaryButton("No longer accepting proposals", {}, enabled = false)
                     }
@@ -227,7 +228,7 @@ fun JobDetailScreen(jobId: String, app: AppViewModel, nav: Nav) {
                                 Text("${formatKm(distanceKm(u.latitude, u.longitude, job.latitude, job.longitude))} from you", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        if (job.hasLocation) Icon(Icons.Outlined.OpenInNew, "Open in maps", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (job.hasLocation) Icon(Icons.AutoMirrored.Outlined.OpenInNew, "Open in maps", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -334,7 +335,7 @@ private fun ApplySheet(job: Job, onDismiss: () -> Unit, onSubmit: (String, Strin
                     cover.trim().length < 30 -> error = "Write at least 30 characters so the client knows why you're a fit."
                     else -> onSubmit(cover.trim(), if (bid.isBlank()) "" else "${job.currency} ${bid.trim()}")
                 }
-            }, icon = Icons.Outlined.Send)
+            }, icon = Icons.AutoMirrored.Outlined.Send)
         }
     }
 }
@@ -457,7 +458,7 @@ fun PostJobScreen(editId: String, app: AppViewModel, nav: Nav) {
                     category, {}, readOnly = true, label = { Text("Category") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(catMenu) },
                     shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                 )
                 ExposedDropdownMenu(catMenu, { catMenu = false }) {
                     JobCategories.forEach { c -> DropdownMenuItem({ Text(c) }, { category = c; catMenu = false }) }

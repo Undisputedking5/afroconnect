@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.*
@@ -101,7 +102,7 @@ fun SettingsScreen(app: AppViewModel, nav: Nav) {
             SettingsGroup("Activity") {
                 SettingsRow(Icons.Outlined.Notifications, "Notifications", onClick = nav::notifications)
                 if (me?.isClient == false) {
-                    SettingsRow(Icons.Outlined.Assignment, "My applications", onClick = nav::applications)
+                    SettingsRow(Icons.AutoMirrored.Outlined.Assignment, "My applications", onClick = nav::applications)
                     SettingsRow(Icons.Outlined.Bookmarks, "Saved jobs", onClick = nav::saved)
                 } else {
                     SettingsRow(Icons.Outlined.PostAdd, "Post a job", onClick = { nav.postJob() })
@@ -109,7 +110,7 @@ fun SettingsScreen(app: AppViewModel, nav: Nav) {
             }
 
             SettingsGroup("Support") {
-                SettingsRow(Icons.Outlined.HelpOutline, "Help & FAQ") { info = "Help & FAQ" to HELP }
+                SettingsRow(Icons.AutoMirrored.Outlined.HelpOutline, "Help & FAQ") { info = "Help & FAQ" to HELP }
                 SettingsRow(Icons.Outlined.Policy, "Privacy policy") { info = "Privacy policy" to PRIVACY }
                 SettingsRow(Icons.Outlined.Description, "Terms of service") { info = "Terms of service" to TERMS }
                 SettingsRow(Icons.Outlined.Info, "About AfroConnect", "Version ${appVersion(context)}") { info = "About AfroConnect" to ABOUT }
@@ -347,7 +348,7 @@ fun ApplicationsScreen(app: AppViewModel, nav: Nav) {
             }
             if (shown.isEmpty()) item {
                 EmptyState(
-                    Icons.Outlined.Assignment,
+                    Icons.AutoMirrored.Outlined.Assignment,
                     when (tab) { "Hired" -> "No hires yet"; "Closed" -> "Nothing here"; else -> "No active applications" },
                     if (tab == "Active") "Find a job you like and send a proposal." else "Keep applying — your next client is out there."
                 )

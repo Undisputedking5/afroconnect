@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -499,6 +500,29 @@ fun SegmentedTabs(options: List<String>, selected: String, onSelect: (String) ->
                     opt, style = MaterialTheme.typography.labelLarge,
                     color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+private object StatusBarOverride { var count = 0 }
+
+/** Makes status-bar icons white while this is on screen (for screens with a dark gradient header). */
+@Composable
+fun LightStatusBarIcons() {
+    val view = androidx.compose.ui.platform.LocalView.current
+    val lightTheme = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    DisposableEffect(lightTheme) {
+        val activity = generateSequence(view.context) { (it as? android.content.ContextWrapper)?.baseContext }
+            .filterIsInstance<android.app.Activity>().firstOrNull()
+        val controller = activity?.let { androidx.core.view.WindowCompat.getInsetsController(it.window, view) }
+        StatusBarOverride.count++
+        controller?.isAppearanceLightStatusBars = false
+        onDispose {
+            StatusBarOverride.count--
+            if (StatusBarOverride.count <= 0) {
+                StatusBarOverride.count = 0
+                controller?.isAppearanceLightStatusBars = lightTheme
             }
         }
     }

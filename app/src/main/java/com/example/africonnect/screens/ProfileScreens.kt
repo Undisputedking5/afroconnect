@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.*
@@ -85,6 +86,7 @@ fun ProfileScreen(uid: String, app: AppViewModel, nav: Nav, isTab: Boolean = fal
         if (p == null) { Box(Modifier.padding(pad).fillMaxSize()) { LoadingBox() }; return@Scaffold }
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             // ── Cover + avatar ──────────────────────────────────────────────
+            LightStatusBarIcons()
             Box(Modifier.fillMaxWidth()) {
                 Box(Modifier.fillMaxWidth().height(150.dp).background(BrandGradient))
                 Row(Modifier.statusBarsPadding().fillMaxWidth().padding(4.dp)) {
@@ -282,7 +284,7 @@ private fun LinkRow(icon: ImageVector, label: String, url: String, onClick: () -
             Text(label, style = MaterialTheme.typography.titleSmall)
             Text(url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Icon(Icons.Outlined.OpenInNew, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

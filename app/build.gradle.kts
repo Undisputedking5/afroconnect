@@ -15,6 +15,11 @@ android {
         versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1) + 1
         versionName = "2.0.${System.getenv("VERSION_CODE") ?: "0"}"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // CI end-to-end tests point the app at local Firebase emulators.
+        val useEmulator = (project.findProperty("useFirebaseEmulator") as String?) == "true"
+        buildConfigField("boolean", "USE_FIREBASE_EMULATOR", useEmulator.toString())
+        manifestPlaceholders["cleartext"] = useEmulator.toString()
     }
 
     signingConfigs {
@@ -59,6 +64,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
