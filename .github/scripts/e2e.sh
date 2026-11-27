@@ -55,7 +55,7 @@ $UI type "Confirm password" "$PASS"
 $UI tap "Create account"
 $UI wait "Your jobs" 40
 $UI shot 05_client_dashboard_empty
-$UI tap "Post a job"
+$UI tap "Post your first job"
 $UI wait "Publish job"
 $UI type "Job title" "Build a delivery app"
 $UI type "Description" "We need a Kotlin developer to build an Android delivery app with live tracking."

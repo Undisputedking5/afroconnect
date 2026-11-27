@@ -253,7 +253,7 @@ fun ClientHomeScreen(me: UserProfile, app: AppViewModel, nav: Nav) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            if (myJobs.isNotEmpty()) ExtendedFloatingActionButton(
                 onClick = { nav.postJob() }, containerColor = Sunset, contentColor = Color.White,
                 icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Post a job") }
             )
