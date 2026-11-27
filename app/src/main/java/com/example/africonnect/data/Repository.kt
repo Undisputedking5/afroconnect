@@ -51,7 +51,10 @@ suspend fun DatabaseReference.increment(delta: Long = 1) = suspendCancellableCor
  */
 object Repo {
     val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
-    val db: DatabaseReference get() = FirebaseDatabase.getInstance().reference
+    /** Set once at startup (an emulator-bound instance in CI test builds). */
+    var database: FirebaseDatabase? = null
+    private val fdb: FirebaseDatabase get() = database ?: FirebaseDatabase.getInstance()
+    val db: DatabaseReference get() = fdb.reference
     private val storage get() = FirebaseStorage.getInstance().reference
 
     val uid: String get() = auth.currentUser?.uid ?: ""
@@ -94,7 +97,7 @@ object Repo {
     }
 
     private var presenceListener: ValueEventListener? = null
-    private val connectedRef get() = FirebaseDatabase.getInstance().getReference(".info/connected")
+    private val connectedRef get() = fdb.getReference(".info/connected")
 
     fun setupPresence() {
         val me = uid.ifBlank { return }
