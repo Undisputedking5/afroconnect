@@ -1,0 +1,6 @@
+15:46:42.118 [NamespaceSystem-akka.actor.default-dispatcher-4] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+15:46:42.238 [main] INFO com.firebase.server.forge.App$ - Listening at 0.0.0.0:9000
+15:46:43.959 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO com.firebase.core.namespace.NamespaceActor - fake-server successfully activated FBKV (SurveyIdle(0)) wait: 157ms, init: 0ms
+15:46:44.217 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO com.firebase.core.namespace.NamespaceActor - africonnect-ab9c9-default-rtdb successfully activated FBKV (SurveyIdle(0)) wait: 5ms, init: 0ms
+15:46:44.471 [NamespaceSystem-akka.actor.default-dispatcher-4] INFO com.firebase.core.namespace.NamespaceActor - africonnect-ab9c9 successfully activated FBKV (SurveyIdle(0)) wait: 4ms, init: 0ms
+15:46:44.670 [NamespaceSystem-blocking-namespace-operation-dispatcher-6] INFO com.firebase.core.namespace.StateManager - Namespace africonnect-ab9c9-default-rtdb status Active to Active
