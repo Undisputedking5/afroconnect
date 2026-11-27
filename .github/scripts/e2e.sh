@@ -125,7 +125,7 @@ $UI type "Message" "Welcome aboard! Let's start on Monday."
 $UI tap "Send"
 sleep 3
 $UI shot 24_chat
-$UI back
+$UI back; $UI back
 $UI tap "Messages"; sleep 2; $UI shot 25_inbox
 $UI tap "Profile"; $UI tap "Settings"; $UI wait "Appearance"
 $UI tap "Dark"; sleep 1; $UI shot 26_settings_dark
