@@ -13,6 +13,9 @@ finish() {
   code=$?
   $UI shot zz_final || true
   adb logcat -d > shots/logcat.txt || true
+  echo "---- app log (errors/warnings) ----"
+  PID=$(adb shell pidof $PKG | tr -d '\r')
+  awk -v p="$PID" '($3==p && ($5=="E" || $5=="W")) || /FATAL|AndroidRuntime/' shots/logcat.txt | grep -viE "EGL|gralloc|OpenGL|HWUI|ashmem|chatty" | tail -60 || true
   if grep -q "FATAL EXCEPTION" shots/logcat.txt; then
     echo "::error::App crashed"; grep -A40 "FATAL EXCEPTION" shots/logcat.txt | head -80
     exit 1
