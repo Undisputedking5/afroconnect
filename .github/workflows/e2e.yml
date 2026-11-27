@@ -61,6 +61,15 @@ jobs:
           done
           tail -20 emulators.log
 
+      - name: Check emulators accept auth tokens
+        run: |
+          R=$(curl -s -X POST "localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake" -H 'Content-Type: application/json' -d '{"email":"probe@test.dev","password":"secret123","returnSecureToken":true}')
+          TOKEN=$(echo "$R" | python3 -c 'import sys,json;print(json.load(sys.stdin)["idToken"])')
+          UID=$(echo "$R" | python3 -c 'import sys,json;print(json.load(sys.stdin)["localId"])')
+          for NS in africonnect-ab9c9-default-rtdb africonnect-ab9c9; do
+            echo "ns=$NS:"; curl -s -X PUT "localhost:9000/users/$UID/name.json?ns=$NS&auth=$TOKEN" -d '"probe"'; echo
+          done
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -91,7 +100,8 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/pub && cp -r shots /tmp/pub/ 2>/dev/null || true
-          cp emulators.log /tmp/pub/ 2>/dev/null || true
+          cp emulators.log database-debug.log /tmp/pub/ 2>/dev/null || true
+          curl -s "localhost:9099/emulator/v1/projects/africonnect-ab9c9/accounts" > /tmp/pub/auth-accounts.json || true
           cd /tmp/pub
           git init -q -b ci-screenshots
           git config user.name "github-actions"

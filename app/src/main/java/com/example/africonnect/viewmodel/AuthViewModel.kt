@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
 sealed class AuthState {
     data object Idle : AuthState()
@@ -45,16 +46,18 @@ class AuthViewModel : ViewModel() {
                 val user = Repo.auth.createUserWithEmailAndPassword(e, password).await().user
                     ?: return@launch fail("Registration failed")
                 user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name.trim()).build())
-                Repo.db.child("users").child(user.uid).setValue(
-                    mapOf(
-                        "name" to name.trim(),
-                        "email" to e,
-                        "role" to role,
-                        "createdAt" to ServerValue.TIMESTAMP,
-                        "isAvailable" to true,
-                        "workType" to "Remote",
-                    )
-                ).await()
+                withTimeoutOrNull(20_000) {
+                    Repo.db.child("users").child(user.uid).setValue(
+                        mapOf(
+                            "name" to name.trim(),
+                            "email" to e,
+                            "role" to role,
+                            "createdAt" to ServerValue.TIMESTAMP,
+                            "isAvailable" to true,
+                            "workType" to "Remote",
+                        )
+                    ).await()
+                } ?: return@launch fail("Account created, but we couldn't reach the database. Check your connection and sign in again.")
                 _state.value = AuthState.Success(role)
             } catch (t: Throwable) {
                 fail(friendly(t))
@@ -69,7 +72,8 @@ class AuthViewModel : ViewModel() {
             try {
                 val user = Repo.auth.signInWithEmailAndPassword(email.trim(), password).await().user
                     ?: return@launch fail("Login failed")
-                val snap = Repo.db.child("users").child(user.uid).get().await()
+                val snap = withTimeoutOrNull(20_000) { Repo.db.child("users").child(user.uid).get().await() }
+                    ?: return@launch fail("Couldn't reach the database. Check your connection and try again.")
                 if (!snap.exists()) {
                     // Account exists in Auth but its profile was never written — repair it.
                     Repo.db.child("users").child(user.uid).setValue(
